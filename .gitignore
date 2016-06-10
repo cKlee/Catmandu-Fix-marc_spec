@@ -1,0 +1,5 @@
+emit.fix
+lib/MARC
+lib/MARC/*
+lib/Catmandu/Fix/marc_spec_emit.pm
+lib/Catmandu/Fix/Inline/*
