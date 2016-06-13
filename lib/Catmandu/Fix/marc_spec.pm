@@ -3,7 +3,7 @@ package Catmandu::Fix::marc_spec;
 use DDP;
 use Moo;
 use Catmandu::Sane;
-#use Catmandu::Fix;
+use Catmandu::Util qw(:data);
 use Catmandu::Fix::Has;
 use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
@@ -25,15 +25,17 @@ sub fix {
     my $join_char  = $self->join // '';
     my $record_key = $self->record // 'record';
     my $_id        = $data->{_id};
-    #my $fixer      = Catmandu::Fix->new();
-    #my $path       = $fixer->split_path($self->path);
+    
+    my ($path, $key) = parse_data_path($self->path);
+    
 
     # get MARCspec
-    $cache->{$self->spec} = MARC::Spec->new($self->spec) if(!defined $cache->{$self->spec});
+    $cache->{$self->spec} = MARC::Spec->new($self->spec) unless(defined $cache->{$self->spec});
     my $ms = $cache->{$self->spec};
     #p $cache;
     #p $ms;
     #p $ms->field;
+    #p $ms->subfields;
     #p $ms->field->tag;
     
     
@@ -87,7 +89,7 @@ sub fix {
 
     my @filtered = ();
     
-    unless(-1 eq $ms->field->indexLength) {
+    if(-1 ne $ms->field->indexLength) { # index is requested
         # filter by tag
         my @fields = ();
         my $tag = $ms->field->tag;
@@ -98,15 +100,12 @@ sub fix {
         my $index_range = $get_index_range->($ms->field,scalar @fields);
         my $prevTag = "";
         my $index = 0;
-        my $x = 0;
-       
+
         for my $pos (0 .. $#fields ) {
-           my $tag = $fields[$pos][0];
-           $index = ($prevTag eq $tag or "" eq $prevTag) ? $index : 0;
-            if( grep(m/^$index$/xms, @$index_range) ) {
-                push @filtered, $fields[$pos];
-                $x++;
-            }
+            my $tag = $fields[$pos][0];
+            $index = ($prevTag eq $tag or "" eq $prevTag) ? $index : 0;
+            push @filtered, $fields[$pos]
+                if( grep(m/^$index$/xms, @$index_range) );
             $index++;
             $prevTag = $tag;
         }
@@ -115,20 +114,7 @@ sub fix {
 
     my $tmp_record = (@filtered) ? {'_id' => $_id, $record_key => [@filtered]} : $data;
 
-    unless(defined $ms->subfields) {
-        my $mapped;
-        if($self->split) {
-            @$mapped = marc_map( $tmp_record, $marc_path, %opts); # is an AoA
-        } else {
-            $mapped = marc_map( $tmp_record, $marc_path, %opts); # is a string
-        }
-        
-        return $data unless($mapped);
-        
-        $data->{$self->path} = ($self->value) ? $self->value : $data->{$self->path} = $mapped;
-
-        return $data;
-    } else { # now we dealing with subfields
+    if(defined $ms->subfields) { # now we dealing with subfields
         # set the order of subfields
         @{$ms->subfields} = sort {$a->code cmp $b->code} @{$ms->subfields}
             unless($self->pluck);
@@ -153,18 +139,33 @@ sub fix {
 
             push @subfields, @subfield if(@subfield);
         }
+        
         return $data unless(@subfields);
+
+        my $nested = data_at($path, $data, create => 1, key => $key);
         
         if($self->value) {
-            $data->{$self->path} = $self->value;
+            set_data($nested, $key, $self->value);
             return $data;
-        } elsif(!$self->split) {
-            $data->{$self->path} = join($join_char, @subfields);
-        } else {
-            @{$data->{$self->path}} = @subfields;
         }
-        return $data;
+
+        $self->split ? set_data($nested, $key, @subfields) : set_data($nested, $key, join($join_char, @subfields));
+    } else { # no subfields requested
+        my $mapped;
+        if($self->split) {
+            @$mapped = marc_map( $tmp_record, $marc_path, %opts); # is an AoA
+        } else {
+            $mapped = marc_map( $tmp_record, $marc_path, %opts); # is a string
+        }
+        
+        return $data unless($mapped);
+
+        my $nested = data_at($path, $data, create => 1, key => $key);
+        
+        $self->value ? set_data($nested, $key, $self->value) : set_data($nested, $key, $mapped);
     }
+    
+    return $data;
 }
 
 1;
