@@ -87,22 +87,21 @@ sub fix {
         return [$index_start .. $index_end];
     };
 
-    my @filtered = ();
+    # filter by tag
+    my @fields = ();
+    my $tag = $ms->field->tag;
+    return $data
+        unless(@fields = grep { $_->[0] =~ m/$tag/xms } @{$data->{$record_key}});
     
+    # filter by index
     if(-1 ne $ms->field->indexLength) { # index is requested
-        # filter by tag
-        my @fields = ();
-        my $tag = $ms->field->tag;
-        return $data
-            unless(@fields = grep { $_->[0] =~ m/$tag/xms } @{$data->{$record_key}});
-        
-        # filter by index
         my $index_range = $get_index_range->($ms->field,scalar @fields);
         my $prevTag = "";
         my $index = 0;
-
+        my $tag;
+        my @filtered = ();
         for my $pos (0 .. $#fields ) {
-            my $tag = $fields[$pos][0];
+            $tag = $fields[$pos][0];
             $index = ($prevTag eq $tag or "" eq $prevTag) ? $index : 0;
             push @filtered, $fields[$pos]
                 if( grep(m/^$index$/xms, @$index_range) );
@@ -110,9 +109,10 @@ sub fix {
             $prevTag = $tag;
         }
         return $data unless(@filtered);
+        @fields = @filtered;
     }
 
-    my $tmp_record = (@filtered) ? {'_id' => $_id, $record_key => [@filtered]} : $data;
+    my $tmp_record = {'_id' => $_id, $record_key => [@fields]};
 
     if(defined $ms->subfields) { # now we dealing with subfields
         # set the order of subfields
