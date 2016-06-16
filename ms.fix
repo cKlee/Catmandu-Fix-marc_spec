@@ -17,7 +17,8 @@
 
 # repeated fields
 #marc_spec('084', my.classification.split.testvalue, split:1, value:'test')
-#marc_spec('084', my.classification.split, split:1)
+#marc_spec('084', my.ms.classification.split, split:1)
+#marc_spec('084', my.classification.$append)
 #marc_spec('084', my.classification.$append, split:1)
 #marc_spec('084', my.classification.longstring)
 #marc_spec('084', my.classification.longstring.joined, join:'###')
@@ -74,11 +75,18 @@
 # multiple subfields with char pos
 #marc_spec('245$c/#$b/#', 'my.subfields.charpos')
 
+# repeated fields with repeated subfields
+#marc_spec('650$a$0', 'my.rep.subjects')
+#marc_spec('650$0[1]/0-7$a', 'my.rep.subjects', pluck:1)
+marc_spec('650$0[1]/0-7$a', 'my.rep.subjects', pluck:1, split:1)
+#marc_spec('650$a$0', 'my.rep.subjects.$append', split:1)
+#marc_spec('650$a$0', 'my.rep.pluck.subjects.$append', pluck:1, split:1)
+
 ###
 ### subSpecs
 ###
 
-marc_spec('084$a{$2=\bcl}', my.bcl.$append)
+#marc_spec('084$a{$2=\bcl}', my.bcl.$append)
 
 ###
 ### testing
@@ -86,7 +94,7 @@ marc_spec('084$a{$2=\bcl}', my.bcl.$append)
 
 #marc_map('084', 'my.classification')
 #marc_map('084', 'my.classification.$append')
-#marc_map('084', 'my.classification', split:1)
+#marc_map('084', 'my.mm.classification.split', split:1)
 #marc_map('084', 'my.classification.$append', split:1)
 
 #marc_map('.../0', my.fields.with.2charpos, split:1)
