@@ -113,7 +113,7 @@ sub fix {
         my @sf_spec =  map { $_ } @{$ms->subfields};
         unless($self->pluck) { @sf_spec = sort {$a->code cmp $b->code} @sf_spec }
 
-       my ($subfields,$subfield,$sf_range,$char_start);
+        my ($subfields,$subfield,$sf_range,$char_start);
 
         for my $field (@fields) {
             my $start = (defined $field->[$FIXEDFIELD_OFFSET] && $field->[$FIXEDFIELD_OFFSET] eq '_') ?
@@ -352,14 +352,14 @@ MARCspec.
     ["020"," ", " ","a","0491001304","q","black leather"]
     
     # CALL
-    marc_spec('020$q$a', my.natural.isbn, split:1, pluck:1)
+    marc_spec('020$q$a', my.plucked.isbn, split:1, pluck:1)
     
     # OUTPUT
     ["black leather", 0491001304]
 
 =head2 value
 
-If set to an value, this value will be assigned to $var if MARCspec references
+If set to a value, this value will be assigned to $var if MARCspec references
 data content (if the field or subfield exists). 
 
 =head2 record
