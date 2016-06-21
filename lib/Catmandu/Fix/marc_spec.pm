@@ -43,7 +43,7 @@ sub fix {
     my $indicators = '';
     my $ind2 = (defined $ms->field->indicator2) ? ','.$ms->field->indicator2 : '';
     my $ind1 = (defined $ms->field->indicator1) ? $ms->field->indicator1 : '';
-    if($ind1 ne '' and $ind2 ne '') { $indicators = '['.$ind1.$ind2.']' }
+    if($ind1 ne '' or $ind2 ne '') { $indicators = '['.$ind1.$ind2.']' }
     
     # char positions
     my $char_pos = (defined $ms->field->charPos && '#' ne $ms->field->charStart) ? '/'.$ms->field->charPos : '';
