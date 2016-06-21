@@ -2,10 +2,11 @@ package Catmandu::Fix::marc_spec;
 
 use Moo;
 use Catmandu::Sane;
-use Catmandu::Util qw(:data);
+use Catmandu::Util qw(:data :array);
 use Catmandu::Fix::Has;
 use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
+use Const::Fast;
 
 has spec       => (fix_arg => 1);
 has path       => (fix_arg => 1);
@@ -16,12 +17,17 @@ has value      => (fix_opt => 1);
 has pluck      => (fix_opt => 1);
 has data       => (fix_opt => 1, default => sub {{}} );
 
+const my $NO_LENGTH => -1;
+const my $DATAFIELD_OFFSET => 5;
+const my $FIXEDFIELD_OFFSET => 3;
+
 my $cache;
 
 sub fix {
     my ($self, $data) = @_;
 
-    my $join_char  = $self->join // '';
+    my $EMPTY = q{};
+    my $join_char  = $self->join // $EMPTY;
     my $record_key = $self->record // 'record';
     my $_id        = $data->{_id};
     
@@ -40,13 +46,13 @@ sub fix {
     $opts{'-pluck'}  = $self->pluck;
     
     # indicators
-    my $indicators = '';
-    my $ind2 = (defined $ms->field->indicator2) ? ','.$ms->field->indicator2 : '';
-    my $ind1 = (defined $ms->field->indicator1) ? $ms->field->indicator1 : '';
-    if($ind1 ne '' or $ind2 ne '') { $indicators = '['.$ind1.$ind2.']' }
+    my $indicators = $EMPTY;
+    my $ind2 = (defined $ms->field->indicator2) ? ','.$ms->field->indicator2 : $EMPTY;
+    my $ind1 = (defined $ms->field->indicator1) ? $ms->field->indicator1 : $EMPTY;
+    if($ind1 ne $EMPTY or $ind2 ne $EMPTY) { $indicators = '['.$ind1.$ind2.']' }
     
     # char positions
-    my $char_pos = (defined $ms->field->charPos && '#' ne $ms->field->charStart) ? '/'.$ms->field->charPos : '';
+    my $char_pos = (defined $ms->field->charPos && '#' ne $ms->field->charStart) ? '/'.$ms->field->charPos : $EMPTY;
     
     my $marc_path = $ms->field->tag.$indicators.$char_pos;
 
@@ -61,12 +67,12 @@ sub fix {
             if('#' eq $index_end or 0 eq $index_end) { return [$lastIndex] }
             $index_start = $lastIndex;
             $index_end = $lastIndex - $index_end;
-            $index_end = 0 if (0 > $index_end);
+            if(0 > $index_end) { $index_end = 0 }
         } else {
              if ($lastIndex < $index_start) { return [$index_start] } # this will result to no hits
         }
         
-        $index_end = $lastIndex if ('#' eq $index_end or $index_end > $lastIndex);
+        if ('#' eq $index_end or $index_end > $lastIndex) { $index_end = $lastIndex }
 
         my @range = ($index_start <= $index_end) ? ($index_start .. $index_end) : ($index_end .. $index_start);
         return \@range;
@@ -74,22 +80,23 @@ sub fix {
 
     # filter by tag
     my @fields = ();
-    my $tag = $ms->field->tag;
-    unless(@fields = grep { $_->[0] =~ m/$tag/xms } @{$data->{$record_key}}) {
+    my $re_tag = $ms->field->tag;
+    unless(@fields = grep { $_->[0] =~ m/$re_tag/xms } @{$data->{$record_key}}) {
         return $data;
     }
 
     # filter by index
-    if(-1 ne $ms->field->indexLength) { # index is requested
+    if($NO_LENGTH != $ms->field->indexLength) { # index is requested
         my $index_range = $get_index_range->($ms->field,scalar @fields);
-        my $prevTag = '';
+        my $prevTag = $EMPTY;
         my $index = 0;
         my $tag;
         my @filtered = ();
         for my $pos (0 .. $#fields ) {
             $tag = $fields[$pos][0];
-            $index = ($prevTag eq $tag or '' eq $prevTag) ? $index : 0;
-            if( grep(m/^$index$/xms, @$index_range) ) {
+            $index = ($prevTag eq $tag or $EMPTY eq $prevTag) ? $index : 0;
+            #if( grep { m/^$index$/xms }, @$index_range ) {
+            if( array_includes($index_range, $index) ) {
                 push @filtered, $fields[$pos];
             }
             $index++;
@@ -109,20 +116,21 @@ sub fix {
        my ($subfields,$subfield,$sf_range,$char_start);
 
         for my $field (@fields) {
-            my $start = (defined $field->[3] && $field->[3] eq '_') ? 5 : 3;
+            my $start = (defined $field->[$FIXEDFIELD_OFFSET] && $field->[$FIXEDFIELD_OFFSET] eq '_') ?
+                $DATAFIELD_OFFSET : $FIXEDFIELD_OFFSET;
 
             for my $sf (@sf_spec) {
                 $subfield = [];
                 my $code = $sf->code;
                 for (my $i = $start; $i < @$field; $i += 2) {
-                    if ($field->[$i] =~ /$code/) {
+                    if ($field->[$i] =~ /$code/x) {
                         push(@$subfield, $field->[$i + 1]);
                     }
                 }
                 next unless(@$subfield);
 
                 # filter by index
-                if(-1 ne $sf->indexLength) {
+                if($NO_LENGTH != $sf->indexLength) {
                     $sf_range = $get_index_range->($sf, scalar @$subfield);
                     @$subfield = map { defined ${$subfield}[$_] ? ${$subfield}[$_] : () } @$sf_range;
                     next unless(@$subfield);
@@ -269,7 +277,7 @@ part, but has a more fine grained method to reference data content.
 See L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/> 
 for documentation on the path syntax.
 
-=head1 METHODS
+=head1 SUBROUTINES/METHODS
 
 =head2 marc_spec($marcspec, $var, %options)
 
@@ -365,6 +373,11 @@ work on this record instead of the default record.
     copy_field(record, record2)
     # do some stuff with record2 an later
     marc_spec('245$a', my.title.other, record:'record2')
+
+=head1 BUGS AND LIMITATIONS
+
+This version of is agnostic of Subspecs as described in  L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>.
+Later versions will include this feature.
 
 =head1 AUTHOR
 
