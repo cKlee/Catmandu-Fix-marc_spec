@@ -29,7 +29,9 @@ sub fix {
     
 
     # get MARCspec
-    $cache->{$self->spec} = MARC::Spec->new($self->spec) unless(defined $cache->{$self->spec});
+    if(!defined $cache->{$self->spec}) {
+        $cache->{$self->spec} = MARC::Spec->new($self->spec);
+    }
     my $ms = $cache->{$self->spec};
 
     my %opts;
@@ -41,8 +43,7 @@ sub fix {
     my $indicators = '';
     my $ind2 = (defined $ms->field->indicator2) ? ','.$ms->field->indicator2 : '';
     my $ind1 = (defined $ms->field->indicator1) ? $ms->field->indicator1 : '';
-    $indicators = '['.$ind1.$ind2.']'
-        unless($ind1 eq '' and $ind2 eq '');
+    if($ind1 ne '' and $ind2 ne '') { $indicators = '['.$ind1.$ind2.']' }
     
     # char positions
     my $char_pos = (defined $ms->field->charPos && '#' ne $ms->field->charStart) ? '/'.$ms->field->charPos : '';
@@ -57,14 +58,12 @@ sub fix {
         my $index_end = $spec->indexEnd;
         
         if('#' eq $index_start) {
-            return [$lastIndex]
-                if('#' eq $index_end or 0 eq $index_end);
+            if('#' eq $index_end or 0 eq $index_end) { return [$lastIndex] }
             $index_start = $lastIndex;
             $index_end = $lastIndex - $index_end;
             $index_end = 0 if (0 > $index_end);
         } else {
-            return [$index_start]
-                if ($lastIndex < $index_start); # this will result to no hits
+             if ($lastIndex < $index_start) { return [$index_start] } # this will result to no hits
         }
         
         $index_end = $lastIndex if ('#' eq $index_end or $index_end > $lastIndex);
@@ -76,8 +75,9 @@ sub fix {
     # filter by tag
     my @fields = ();
     my $tag = $ms->field->tag;
-    return $data
-        unless(@fields = grep { $_->[0] =~ m/$tag/xms } @{$data->{$record_key}});
+    unless(@fields = grep { $_->[0] =~ m/$tag/xms } @{$data->{$record_key}}) {
+        return $data;
+    }
 
     # filter by index
     if(-1 ne $ms->field->indexLength) { # index is requested
@@ -89,12 +89,13 @@ sub fix {
         for my $pos (0 .. $#fields ) {
             $tag = $fields[$pos][0];
             $index = ($prevTag eq $tag or '' eq $prevTag) ? $index : 0;
-            push @filtered, $fields[$pos]
-                if( grep(m/^$index$/xms, @$index_range) );
+            if( grep(m/^$index$/xms, @$index_range) ) {
+                push @filtered, $fields[$pos];
+            }
             $index++;
             $prevTag = $tag;
         }
-        return $data unless(@filtered);
+        unless(@filtered) { return $data };
         @fields = @filtered;
     }
 
@@ -103,8 +104,7 @@ sub fix {
     if(defined $ms->subfields) { # now we dealing with subfields
         # set the order of subfields
         my @sf_spec =  map { $_ } @{$ms->subfields};
-        @sf_spec = sort {$a->code cmp $b->code} @sf_spec
-            unless($self->pluck);
+        unless($self->pluck) { @sf_spec = sort {$a->code cmp $b->code} @sf_spec }
 
        my ($subfields,$subfield,$sf_range,$char_start);
 
@@ -122,7 +122,7 @@ sub fix {
                 next unless(@$subfield);
 
                 # filter by index
-                unless(-1 eq $sf->indexLength) {
+                if(-1 ne $sf->indexLength) {
                     $sf_range = $get_index_range->($sf, scalar @$subfield);
                     @$subfield = map { defined ${$subfield}[$_] ? ${$subfield}[$_] : () } @$sf_range;
                     next unless(@$subfield);
@@ -138,7 +138,7 @@ sub fix {
             }
         }
 
-        return $data unless($subfields);
+        unless($subfields) { return $data }
 
         my $nested = data_at($path, $data, create => 1, key => $key);
         
@@ -151,7 +151,7 @@ sub fix {
     } else { # no subfields requested
         my $mapped;
         @$mapped = marc_map($tmp_record, $marc_path, %opts);
-        return $data unless($mapped);
+        unless($mapped) { return $data }
 
         # get substring
         if(defined $ms->field->charPos) {
