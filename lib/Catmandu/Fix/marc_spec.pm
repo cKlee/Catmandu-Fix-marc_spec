@@ -8,10 +8,6 @@ use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
 use Const::Fast;
 
-use DDP;
-use strict;
-use warnings;
-
 has spec       => (fix_arg => 1);
 has path       => (fix_arg => 1);
 has record     => (fix_opt => 1);
@@ -19,7 +15,7 @@ has split      => (fix_opt => 1);
 has join       => (fix_opt => 1);
 has value      => (fix_opt => 1);
 has pluck      => (fix_opt => 1);
-has invert      => (fix_opt => 1);
+has invert     => (fix_opt => 1);
 has data       => (fix_opt => 1, default => sub {{}} );
 
 const my $NO_LENGTH => -1;
@@ -224,7 +220,6 @@ sub fix {
 
         $self->split ? $set_data->( [@mapped] ) : $set_data->( join($join_char, @mapped) );
     }
-    #p $data;
     return $data;
 }
 
