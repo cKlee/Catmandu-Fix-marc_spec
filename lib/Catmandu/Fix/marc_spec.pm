@@ -8,6 +8,10 @@ use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
 use Const::Fast;
 
+use DDP;
+use strict;
+use warnings;
+
 has spec       => (fix_arg => 1);
 has path       => (fix_arg => 1);
 has record     => (fix_opt => 1);
@@ -15,11 +19,17 @@ has split      => (fix_opt => 1);
 has join       => (fix_opt => 1);
 has value      => (fix_opt => 1);
 has pluck      => (fix_opt => 1);
+has invert      => (fix_opt => 1);
 has data       => (fix_opt => 1, default => sub {{}} );
 
 const my $NO_LENGTH => -1;
 const my $DATAFIELD_OFFSET => 5;
 const my $FIXEDFIELD_OFFSET => 3;
+const my $INVERT_LEVEL_DEFAULT => 4;
+const my $INVERT_LEVEL_3 => 3;
+const my $INVERT_LEVEL_2 => 2;
+const my $INVERT_LEVEL_1 => 1;
+const my $INVERT_LEVEL_0 => 0;
 
 my $cache;
 
@@ -27,10 +37,10 @@ sub fix {
     my ($self, $data) = @_;
 
     my $EMPTY = q{};
-    my $join_char  = $self->join // $EMPTY;
-    my $record_key = $self->record // 'record';
-    my $_id        = $data->{_id};
-    
+    my $join_char    = $self->join // $EMPTY;
+    my $record_key   = $self->record // 'record';
+    my $_id          = $data->{_id};
+
     my ($path, $key) = parse_data_path($self->path);
     
 
@@ -77,6 +87,13 @@ sub fix {
         my @range = ($index_start <= $index_end) ? ($index_start .. $index_end) : ($index_end .. $index_start);
         return \@range;
     };
+    
+    my $set_data = sub {
+        my ($val) = @_;
+        my $nested = data_at($path, $data, create => 1, key => $key);
+        set_data($nested, $key, $val);
+        return $data;
+    };
 
     # filter by tag
     my @fields = ();
@@ -95,7 +112,6 @@ sub fix {
         for my $pos (0 .. $#fields ) {
             $tag = $fields[$pos][0];
             $index = ($prevTag eq $tag or $EMPTY eq $prevTag) ? $index : 0;
-            #if( grep { m/^$index$/xms }, @$index_range ) {
             if( array_includes($index_range, $index) ) {
                 push @filtered, $fields[$pos];
             }
@@ -105,7 +121,10 @@ sub fix {
         unless(@filtered) { return $data };
         @fields = @filtered;
     }
-
+    
+    # return $self->value ASAP
+    if($self->value && !defined $ms->subfields) { return $set_data->($self->value) }
+    
     my $tmp_record = {'_id' => $_id, $record_key => [@fields]};
 
     if(defined $ms->subfields) { # now we dealing with subfields
@@ -113,71 +132,99 @@ sub fix {
         my @sf_spec =  map { $_ } @{$ms->subfields};
         unless($self->pluck) { @sf_spec = sort {$a->code cmp $b->code} @sf_spec }
 
-        my ($subfields,$subfield,$sf_range,$char_start);
+        # set invert level default
+        my $invert_level = $INVERT_LEVEL_DEFAULT;
+        my $codes;
+        if($self->invert) {
+            $codes = q{[^};
+            $codes .= join '', map { $_->code } @sf_spec;
+            $codes .= q{]};
+        }
+
+        my (@subfields, @subfield, $sf_range, $char_start);
+        my $invert_chars = sub {
+            my ($str, $start, $length) = @_;
+            for (substr $str, $start, $length) {
+                $_ = '';
+            }
+            return $str;
+        };
 
         for my $field (@fields) {
             my $start = (defined $field->[$FIXEDFIELD_OFFSET] && $field->[$FIXEDFIELD_OFFSET] eq '_') ?
                 $DATAFIELD_OFFSET : $FIXEDFIELD_OFFSET;
 
             for my $sf (@sf_spec) {
-                $subfield = [];
-                my $code = $sf->code;
-                for (my $i = $start; $i < @$field; $i += 2) {
-                    if ($field->[$i] =~ /$code/x) {
-                        push(@$subfield, $field->[$i + 1]);
+                # set invert level
+                if($self->invert) {
+                    if($NO_LENGTH == $sf->indexLength && !defined $sf->charStart) { # todo add subspec check
+                        next if ($invert_level == $INVERT_LEVEL_3); # skip subfield spec it's already covered
+                        $invert_level = $INVERT_LEVEL_3;
+                    } elsif (!defined $sf->charStart) { # todo add subspec check
+                        $invert_level = $INVERT_LEVEL_2;
+                    } else { # todo add subspec check
+                        $invert_level = $INVERT_LEVEL_1;
                     }
                 }
-                next unless(@$subfield);
+
+                @subfield = ();
+                my $code = ( $invert_level == $INVERT_LEVEL_3 ) ? $codes : $sf->code;
+                for (my $i = $start; $i < @$field; $i += 2) {
+                    if ($field->[$i] =~ /$code/x) {
+                        push(@subfield, $field->[$i + 1]);
+                    }
+                }
+
+                if( $invert_level == $INVERT_LEVEL_3 ) {
+                    if(@subfield) { push @subfields, @subfield }
+                    # return $self->value ASAP
+                    if(@subfields && $self->value) { return $set_data->($self->value) }
+                    next;
+                }
+                next unless(@subfield);
 
                 # filter by index
                 if($NO_LENGTH != $sf->indexLength) {
-                    $sf_range = $get_index_range->($sf, scalar @$subfield);
-                    @$subfield = map { defined ${$subfield}[$_] ? ${$subfield}[$_] : () } @$sf_range;
-                    next unless(@$subfield);
+                    $sf_range = $get_index_range->($sf, scalar @subfield);
+                    if( $invert_level == $INVERT_LEVEL_2 ) { # inverted
+                        @subfield = map { array_includes($sf_range, $_) ? () : $subfield[$_] } 0..$#subfield;
+                    } else { # without invert
+                        @subfield = map { defined $subfield[$_] ? $subfield[$_] : () } @$sf_range;
+                    }
+                    next unless(@subfield);
                 }
+                # return $self->value ASAP
+                if($self->value) { return $set_data->($self->value) }
 
                 # get substring
                 if(defined $sf->charPos) {
                     $char_start = ('#' eq $sf->charStart) ? $sf->charLength * -1 : $sf->charStart;
-                    @$subfield = map {substr ($_, $char_start, $sf->charLength)} @$subfield;
+                    if( $invert_level == $INVERT_LEVEL_1 ) { # inverted
+                        @subfield = map { $invert_chars->($_, $char_start, $sf->charLength) } @subfield;
+                    } else {
+                        @subfield = map { substr $_, $char_start, $sf->charLength } @subfield;
+                    }
                 }
-
-                push @$subfields, @$subfield if(@$subfield);
+                push @subfields, @subfield if(@subfield);
             }
         }
 
-        unless($subfields) { return $data }
+        unless(@subfields) { return $data }
 
-        my $nested = data_at($path, $data, create => 1, key => $key);
-        
-        if($self->value) {
-            set_data($nested, $key, $self->value);
-            return $data;
-        }
-
-        $self->split ? set_data($nested, $key, $subfields) : set_data($nested, $key, join($join_char, @$subfields));
+        $self->split ? $set_data->([@subfields]) : $set_data->( join($join_char, @subfields) );
     } else { # no subfields requested
-        my $mapped;
-        @$mapped = marc_map($tmp_record, $marc_path, %opts);
-        unless($mapped) { return $data }
+        my @mapped = marc_map($tmp_record, $marc_path, %opts);
+        unless(@mapped) { return $data }
 
         # get substring
         if(defined $ms->field->charPos) {
             my $char_start = ('#' eq $ms->field->charStart) ? $ms->field->charLength * -1 : $ms->field->charStart;
-            @$mapped = map {substr ($_, $char_start, $ms->field->charLength)} @$mapped;
+            @mapped = map {substr ($_, $char_start, $ms->field->charLength)} @mapped;
         }
-        
-        my $nested = data_at($path, $data, create => 1, key => $key);
-        
-        if($self->value) {
-            set_data($nested, $key, $self->value);
-        } elsif(!$self->split) {
-            set_data($nested, $key, join($join_char, @$mapped));
-        } else {
-            set_data($nested, $key, $mapped);
-        }
-        
+
+        $self->split ? $set_data->( [@mapped] ) : $set_data->( join($join_char, @mapped) );
     }
+    #p $data;
     return $data;
 }
 
@@ -265,6 +312,10 @@ Catmandu::Fix::marc_spec - reference MARC values via L<MARCspec - A common MARC 
     # of value of second subfield a in 'natural' order of all fields 020
     # as an array to  my.isbn.qual.substring.other
     marc_spec('020$q[#]/0-4$a[1]/#', my.isbn.qual.substring.other, split:1)
+    
+    # Assign values of of all other subfields than a of field 020
+    # to my.isbn.other.subfields
+    marc_spec('020$a' my.isbn.other.subfields, invert:1)
 
 =head1 DESCRIPTION
 
@@ -360,7 +411,19 @@ MARCspec.
 =head2 value
 
 If set to a value, this value will be assigned to $var if MARCspec references
-data content (if the field or subfield exists). 
+data content (if the field or subfield exists).
+
+In case two or more subfields are referenced, the value will be assigned to $var if
+at least one of them exists:
+
+    # INPUT
+    ["020"," ", " ","a","0491001304"]
+    
+    # CALL
+    marc_spec('020$a$q', my.isbns, value:'one subfield exists')
+    
+    # OUTPUT
+    "one subfield exists"
 
 =head2 record
 
@@ -373,6 +436,21 @@ work on this record instead of the default record.
     copy_field(record, record2)
     # do some stuff with record2 an later
     marc_spec('245$a', my.title.other, record:'record2')
+
+=head2 invert
+
+This has only an effect on subfield (values). If set to 1 it will invert the 
+last pattern for every subfield. E.g.
+
+   # references all subfields but not subfield a and q
+   marc_spec('020$a$q' my.other.subfields, invert:1)
+   
+   # references all subfields but not subfield a and not the last repetition
+   # of subfield q
+   marc_spec('020$a$q[#]' my.other.subfields, invert:1)
+   
+   # references all but not the last two characters of first subfield a
+   marc_spec('020$a[0]/#-1' my.other.subfields, invert:1)
 
 =head1 BUGS AND LIMITATIONS
 

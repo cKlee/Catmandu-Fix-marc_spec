@@ -130,5 +130,9 @@ is_deeply
     ],
     q|fix: marc_spec('020$q[#]/0-4$a[1]/#-0', my.isbn.qual.substring.other, split:1);|;
 
+is $records->[9]->{my}{level3}{inverted}, '2000.', q|fix: marc_spec('260[#]$b$a', my.level3.inverted, invert:1);|;
+is $records->[9]->{my}{level2}{inverted}, 'black leatherblue pigskin', q|fix: marc_spec('020$a$q[#]', my.level2.inverted, invert:1);|;
+is $records->[9]->{my}{level1}{inverted}, 'ebinding', q|fix: marc_spec('020[#]$a$q[#]/1-5', my.level1.inverted, invert:1);|;
+is $records->[9]->{my}{multi}{level1}{inverted}, 'bleatherbigskinebinding', q|fix: marc_spec('020[#]$a$q[0]/1-5$q[1]/1-5$q[2]/1-5', my.multi.level1.inverted, invert:1);|;
 
 done_testing;

@@ -49,3 +49,9 @@ marc_spec('020$q$a', my.isbns.pluck.all, split:1, pluck:1)
 marc_spec('020$q[#]$a[1]', my.isbn.qual.other, split:1)
 marc_spec('020$q[#-1]$a[0-1]', my.isbn.qual.range, split:1)
 marc_spec('020$q[#]/0-4$a[1]/#-0', my.isbn.qual.substring.other, split:1)
+
+
+marc_spec('260[#]$b$a', my.level3.inverted, invert:1)
+marc_spec('020$a$q[#]', my.level2.inverted, invert:1)
+marc_spec('020[#]$a$q[#]/1-5', my.level1.inverted, invert:1)
+marc_spec('020[#]$a$q[0]/1-5$q[1]/1-5$q[2]/1-5', my.multi.level1.inverted, invert:1)
