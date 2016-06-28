@@ -8,6 +8,8 @@ use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
 use Const::Fast;
 
+our $VERSION = '0.0.1';
+
 has spec       => (fix_arg => 1);
 has path       => (fix_arg => 1);
 has record     => (fix_opt => 1);
@@ -58,7 +60,7 @@ sub fix {
     if($ind1 ne $EMPTY or $ind2 ne $EMPTY) { $indicators = '['.$ind1.$ind2.']' }
     
     # char positions
-    my $char_pos = (defined $ms->field->charPos && '#' ne $ms->field->charStart) ? '/'.$ms->field->charPos : $EMPTY;
+    my $char_pos = (defined $ms->field->char_pos && '#' ne $ms->field->char_start) ? '/'.$ms->field->char_pos : $EMPTY;
     
     my $marc_path = $ms->field->tag.$indicators.$char_pos;
 
@@ -66,8 +68,8 @@ sub fix {
         my ($spec,$total) = @_;
 
         my $lastIndex = $total - 1;
-        my $index_start = $spec->indexStart;
-        my $index_end = $spec->indexEnd;
+        my $index_start = $spec->index_start;
+        my $index_end = $spec->index_end;
         
         if('#' eq $index_start) {
             if('#' eq $index_end or 0 eq $index_end) { return [$lastIndex] }
@@ -99,7 +101,7 @@ sub fix {
     }
 
     # filter by index
-    if($NO_LENGTH != $ms->field->indexLength) { # index is requested
+    if($NO_LENGTH != $ms->field->index_length) { # index is requested
         my $index_range = $get_index_range->($ms->field,scalar @fields);
         my $prevTag = $EMPTY;
         my $index = 0;
@@ -153,10 +155,10 @@ sub fix {
             for my $sf (@sf_spec) {
                 # set invert level
                 if($self->invert) {
-                    if($NO_LENGTH == $sf->indexLength && !defined $sf->charStart) { # todo add subspec check
+                    if($NO_LENGTH == $sf->index_length && !defined $sf->char_start) { # todo add subspec check
                         next if ($invert_level == $INVERT_LEVEL_3); # skip subfield spec it's already covered
                         $invert_level = $INVERT_LEVEL_3;
-                    } elsif (!defined $sf->charStart) { # todo add subspec check
+                    } elsif (!defined $sf->char_start) { # todo add subspec check
                         $invert_level = $INVERT_LEVEL_2;
                     } else { # todo add subspec check
                         $invert_level = $INVERT_LEVEL_1;
@@ -180,7 +182,7 @@ sub fix {
                 next unless(@subfield);
 
                 # filter by index
-                if($NO_LENGTH != $sf->indexLength) {
+                if($NO_LENGTH != $sf->index_length) {
                     $sf_range = $get_index_range->($sf, scalar @subfield);
                     if( $invert_level == $INVERT_LEVEL_2 ) { # inverted
                         @subfield = map { array_includes($sf_range, $_) ? () : $subfield[$_] } 0..$#subfield;
@@ -193,12 +195,12 @@ sub fix {
                 if($self->value) { return $set_data->($self->value) }
 
                 # get substring
-                if(defined $sf->charPos) {
-                    $char_start = ('#' eq $sf->charStart) ? $sf->charLength * -1 : $sf->charStart;
+                if(defined $sf->char_pos) {
+                    $char_start = ('#' eq $sf->char_start) ? $sf->char_length * -1 : $sf->char_start;
                     if( $invert_level == $INVERT_LEVEL_1 ) { # inverted
-                        @subfield = map { $invert_chars->($_, $char_start, $sf->charLength) } @subfield;
+                        @subfield = map { $invert_chars->($_, $char_start, $sf->char_length) } @subfield;
                     } else {
-                        @subfield = map { substr $_, $char_start, $sf->charLength } @subfield;
+                        @subfield = map { substr $_, $char_start, $sf->char_length } @subfield;
                     }
                 }
                 push @subfields, @subfield if(@subfield);
@@ -213,9 +215,9 @@ sub fix {
         unless(@mapped) { return $data }
 
         # get substring
-        if(defined $ms->field->charPos) {
-            my $char_start = ('#' eq $ms->field->charStart) ? $ms->field->charLength * -1 : $ms->field->charStart;
-            @mapped = map {substr ($_, $char_start, $ms->field->charLength)} @mapped;
+        if(defined $ms->field->char_pos) {
+            my $char_start = ('#' eq $ms->field->char_start) ? $ms->field->char_length * -1 : $ms->field->char_start;
+            @mapped = map {substr ($_, $char_start, $ms->field->char_length)} @mapped;
         }
 
         $self->split ? $set_data->( [@mapped] ) : $set_data->( join($join_char, @mapped) );
