@@ -43,7 +43,7 @@ sub fix {
 
     # get MARCspec
     if ( !defined $cache->{ $self->spec } ) {
-        $cache->{ $self->spec } = MARC::Spec->new( $self->spec );
+        $cache->{ $self->spec } = MARC::Spec->parse( $self->spec );
     }
     my $ms = $cache->{ $self->spec };
 
