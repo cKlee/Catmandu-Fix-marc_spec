@@ -17,11 +17,10 @@ has join   => ( fix_opt => 1 );
 has value  => ( fix_opt => 1 );
 has pluck  => ( fix_opt => 1 );
 has invert => ( fix_opt => 1 );
-has data   => ( fix_opt => 1, default => sub { {} } );
+#has data   => ( fix_opt => 1, default => sub { {} } );
 
 const my $NO_LENGTH            => -1;
-const my $DATAFIELD_OFFSET     => 5;
-const my $FIXEDFIELD_OFFSET    => 3;
+const my $FIELD_OFFSET         => 3;
 const my $INVERT_LEVEL_DEFAULT => 4;
 const my $INVERT_LEVEL_3       => 3;
 const my $INVERT_LEVEL_2       => 2;
@@ -34,7 +33,6 @@ my $cache;
 sub fix {
     my ( $self, $data ) = @_;
 
-    
     my $join_char  = $self->join // $EMPTY;
     my $record_key = $self->record // 'record';
     my $_id        = $data->{_id};
@@ -70,11 +68,11 @@ sub fix {
             $index_end = $last_index;
         }
 
-        my @range =
+        my $range =
             ( $index_start <= $index_end )
-          ? ( $index_start .. $index_end )
-          : ( $index_end .. $index_start );
-        return \@range;
+          ? [ $index_start .. $index_end ]
+          : [ $index_end .. $index_start ];
+        return $range;
     };
 
     my $set_data = sub {
@@ -86,33 +84,37 @@ sub fix {
 
     # filter by tag
     my @fields = ();
-    my $re_tag = $ms->field->tag;
+    my $field_spec = $ms->field;
+    my $tag = $field_spec->tag;
+    $tag = qr/$tag/;
     unless ( @fields =
-        grep { $_->[0] =~ m/$re_tag/xms } @{ $data->{$record_key} } )
+        grep { $_->[0] =~ /$tag/ } @{ $data->{$record_key} } )
     {
         return $data;
     }
 
-    if (defined $ms->field->indicator1) {
-        my $indicator1 = $ms->field->indicator1;
+    if (defined $field_spec->indicator1) {
+        my $indicator1 = $field_spec->indicator1;
+        $indicator1 = qr/$indicator1/;
         unless( @fields = 
-            grep { defined $_->[1] && $_->[1] =~ m/$indicator1/xms } @fields)
+            grep { defined $_->[1] && $_->[1] =~ /$indicator1/ } @fields)
         {
             return $data;
         }
     }
-    if (defined $ms->field->indicator2) {
-        my $indicator2 = $ms->field->indicator2;
+    if (defined $field_spec->indicator2) {
+        my $indicator2 = $field_spec->indicator2;
+        $indicator2 = qr/$indicator2/;
         unless( @fields = 
-            grep { defined $_->[2] && $_->[2] =~ m/$indicator2/xms } @fields)
+            grep { defined $_->[2] && $_->[2] =~ /$indicator2/ } @fields)
         {
             return $data;
         }
     }
 
     # filter by index
-    if ( $NO_LENGTH != $ms->field->index_length ) {    # index is requested
-        my $index_range = $get_index_range->( $ms->field, scalar @fields );
+    if ( $NO_LENGTH != $field_spec->index_length ) {    # index is requested
+        my $index_range = $get_index_range->( $field_spec, scalar @fields );
         my $prevTag     = $EMPTY;
         my $index       = 0;
         my $tag;
@@ -161,9 +163,8 @@ sub fix {
         };
 
         for my $field (@fields) {
-            my $start = $FIXEDFIELD_OFFSET;
+            my $start = $FIELD_OFFSET;
             for my $sf (@sf_spec) {
-
                 # set invert level
                 if ( $self->invert ) {
                     if ( $NO_LENGTH == $sf->index_length
@@ -186,8 +187,9 @@ sub fix {
                 @subfield = ();
                 my $code =
                   ( $invert_level == $INVERT_LEVEL_3 ) ? $codes : $sf->code;
+                $code = qr/$code/;
                 for ( my $i = $start ; $i < @$field ; $i += 2 ) {
-                    if ( $field->[$i] =~ /$code/x ) {
+                    if ( $field->[$i] =~ /$code/ ) {
                         push( @subfield, $field->[ $i + 1 ] );
                     }
                 }
@@ -225,11 +227,12 @@ sub fix {
                 if ( $self->value ) { return $set_data->( $self->value ) }
 
                 # get substring
-                if ( defined $sf->char_pos ) {
+                my $char_start = $sf->char_start;
+                if ( defined $char_start ) {
                     my $char_start =
-                      ( '#' eq $sf->char_start )
+                      ( '#' eq $char_start )
                       ? $sf->char_length * -1
-                      : $sf->char_start;
+                      : $char_start;
                     if ( $invert_level == $INVERT_LEVEL_1 ) {    # inverted
                         @subfield = map {
                             $invert_chars->( $_, $char_start, $sf->char_length )
@@ -252,16 +255,16 @@ sub fix {
           : $set_data->( join( $join_char, @subfields ) );
     }
     else {    # no subfields requested
-        my $char_start;
-        if ( defined $ms->field->char_pos ) {
+        my $char_start = $field_spec->char_start;
+        if ( defined $char_start ) {
             $char_start =
-              ( '#' eq $ms->field->char_start )
-              ? $ms->field->char_length * -1
-              : $ms->field->char_start;
+              ( '#' eq $char_start )
+              ? $field_spec->char_length * -1
+              : $char_start;
         }
         my @mapped = ();
         for my $field (@fields) {
-            my $start = $FIXEDFIELD_OFFSET + 1;
+            my $start = $FIELD_OFFSET + 1;
 
             my @subfields = ();
             for ( my $i = $start ; $i < @$field ; $i += 2 ) {
@@ -273,7 +276,7 @@ sub fix {
             # get substring
             if ( defined $char_start ) {
                 @subfields =
-                  map { substr $_, $char_start, $ms->field->char_length }
+                  map { substr $_, $char_start, $field_spec->char_length }
                     @subfields;
             }
 

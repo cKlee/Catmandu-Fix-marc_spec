@@ -65,6 +65,8 @@ is $records->[9]->{my}{lastcharpos}{ldr}, '4500', q|fix: marc_spec('LDR/#-3', my
 
 is $records->[9]->{my}{title}{proper}, 'Cross-platform Perl /', q|fix: marc_spec('245$a', my.title.proper);|;
 
+is $records->[9]->{my}{title}{indicator}{proper}, 'Cross-platform Perl /', q|fix: marc_spec('245_10$a', my.title.indicator.proper);|;
+
 is $records->[9]->{my}{title}{charpos}, 'Cr', q|fix: marc_spec('245$a/0-1', my.title.charpos);|;
 
 is $records->[9]->{my}{second}{subject}, 'Web servers.', q|fix: marc_spec('650[1]', my.second.subjects);|;
