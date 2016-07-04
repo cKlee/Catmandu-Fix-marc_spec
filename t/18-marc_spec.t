@@ -1,7 +1,6 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
 use warnings qw(FATAL utf8);
 use utf8;
 
