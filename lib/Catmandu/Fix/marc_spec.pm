@@ -4,7 +4,6 @@ use Moo;
 use Catmandu::Sane;
 use Catmandu::Util qw(:data :array);
 use Catmandu::Fix::Has;
-use Catmandu::Fix::Inline::marc_map qw(:all);
 use MARC::Spec;
 use Const::Fast;
 
@@ -28,13 +27,14 @@ const my $INVERT_LEVEL_3       => 3;
 const my $INVERT_LEVEL_2       => 2;
 const my $INVERT_LEVEL_1       => 1;
 const my $INVERT_LEVEL_0       => 0;
+const my $EMPTY                => q{};
 
 my $cache;
 
 sub fix {
     my ( $self, $data ) = @_;
 
-    my $EMPTY      = q{};
+    
     my $join_char  = $self->join // $EMPTY;
     my $record_key = $self->record // 'record';
     my $_id        = $data->{_id};
@@ -46,31 +46,6 @@ sub fix {
         $cache->{ $self->spec } = MARC::Spec->parse( $self->spec );
     }
     my $ms = $cache->{ $self->spec };
-
-    my %opts;
-    $opts{'-split'} = $self->split;
-    $opts{'-join'}  = $self->join;
-    $opts{'-pluck'} = $self->pluck;
-
-    # indicators
-    my $indicators = $EMPTY;
-    my $ind2 =
-      ( defined $ms->field->indicator2 )
-      ? ',' . $ms->field->indicator2
-      : $EMPTY;
-    my $ind1 =
-      ( defined $ms->field->indicator1 ) ? $ms->field->indicator1 : $EMPTY;
-    if ( $ind1 ne $EMPTY or $ind2 ne $EMPTY ) {
-        $indicators = '[' . $ind1 . $ind2 . ']';
-    }
-
-    # char positions
-    my $char_pos =
-      ( defined $ms->field->char_pos && '#' ne $ms->field->char_start )
-      ? '/' . $ms->field->char_pos
-      : $EMPTY;
-
-    my $marc_path = $ms->field->tag . $indicators . $char_pos;
 
     my $get_index_range = sub {
         my ( $spec, $total ) = @_;
@@ -118,6 +93,23 @@ sub fix {
         return $data;
     }
 
+    if (defined $ms->field->indicator1) {
+        my $indicator1 = $ms->field->indicator1;
+        unless( @fields = 
+            grep { defined $_->[1] && $_->[1] =~ m/$indicator1/xms } @fields)
+        {
+            return $data;
+        }
+    }
+    if (defined $ms->field->indicator2) {
+        my $indicator2 = $ms->field->indicator2;
+        unless( @fields = 
+            grep { defined $_->[2] && $_->[2] =~ m/$indicator2/xms } @fields)
+        {
+            return $data;
+        }
+    }
+
     # filter by index
     if ( $NO_LENGTH != $ms->field->index_length ) {    # index is requested
         my $index_range = $get_index_range->( $ms->field, scalar @fields );
@@ -143,8 +135,6 @@ sub fix {
         return $set_data->( $self->value );
     }
 
-    my $tmp_record = { '_id' => $_id, $record_key => [@fields] };
-
     if ( defined $ms->subfields ) {    # now we dealing with subfields
                                        # set the order of subfields
         my @sf_spec = map { $_ } @{ $ms->subfields };
@@ -156,12 +146,12 @@ sub fix {
         my $invert_level = $INVERT_LEVEL_DEFAULT;
         my $codes;
         if ( $self->invert ) {
-            $codes = q{[^};
+            $codes = '[^';
             $codes .= join '', map { $_->code } @sf_spec;
-            $codes .= q{]};
+            $codes .= ']';
         }
 
-        my ( @subfields, @subfield, $sf_range, $char_start );
+        my ( @subfields, @subfield );
         my $invert_chars = sub {
             my ( $str, $start, $length ) = @_;
             for ( substr $str, $start, $length ) {
@@ -171,12 +161,7 @@ sub fix {
         };
 
         for my $field (@fields) {
-            my $start =
-              ( defined $field->[$FIXEDFIELD_OFFSET]
-                  && $field->[$FIXEDFIELD_OFFSET] eq '_' )
-              ? $DATAFIELD_OFFSET
-              : $FIXEDFIELD_OFFSET;
-
+            my $start = $FIXEDFIELD_OFFSET;
             for my $sf (@sf_spec) {
 
                 # set invert level
@@ -220,7 +205,7 @@ sub fix {
 
                 # filter by index
                 if ( $NO_LENGTH != $sf->index_length ) {
-                    $sf_range = $get_index_range->( $sf, scalar @subfield );
+                    my $sf_range = $get_index_range->( $sf, scalar @subfield );
                     if ( $invert_level == $INVERT_LEVEL_2 ) {    # inverted
                         @subfield = map {
                             array_includes( $sf_range, $_ )
@@ -241,7 +226,7 @@ sub fix {
 
                 # get substring
                 if ( defined $sf->char_pos ) {
-                    $char_start =
+                    my $char_start =
                       ( '#' eq $sf->char_start )
                       ? $sf->char_length * -1
                       : $sf->char_start;
@@ -267,18 +252,35 @@ sub fix {
           : $set_data->( join( $join_char, @subfields ) );
     }
     else {    # no subfields requested
-        my @mapped = marc_map( $tmp_record, $marc_path, %opts );
-        unless (@mapped) { return $data }
-
-        # get substring
+        my $char_start;
         if ( defined $ms->field->char_pos ) {
-            my $char_start =
+            $char_start =
               ( '#' eq $ms->field->char_start )
               ? $ms->field->char_length * -1
               : $ms->field->char_start;
-            @mapped = map { substr $_, $char_start, $ms->field->char_length }
-              @mapped;
         }
+        my @mapped = ();
+        for my $field (@fields) {
+            my $start = $FIXEDFIELD_OFFSET + 1;
+
+            my @subfields = ();
+            for ( my $i = $start ; $i < @$field ; $i += 2 ) {
+                    push( @subfields, $field->[$i] );
+            }
+            next unless (@subfields);
+
+
+            # get substring
+            if ( defined $char_start ) {
+                @subfields =
+                  map { substr $_, $char_start, $ms->field->char_length }
+                    @subfields;
+            }
+
+            push @mapped, @subfields;
+        }
+
+        unless (@mapped) { return $data }
 
         $self->split
           ? $set_data->( [@mapped] )
