@@ -1,8 +1,11 @@
 # NAME
 
-Catmandu::Fix::marc\_spec - reference MARC values via [MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/)
+Catmandu::Fix::marc\_spec - reference MARC values via 
+[MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/)
 
 # SYNOPSIS
+
+In a fix file e.g. 'my.fix':
 
     # Assign value of MARC leader to my.ldr.all
     marc_spec('LDR', my.ldr.all)
@@ -82,27 +85,42 @@ Catmandu::Fix::marc\_spec - reference MARC values via [MARCspec - A common MARC 
     # to my.isbn.other.subfields
     marc_spec('020$a' my.isbn.other.subfields, invert:1)
 
+And then on command line:
+
+    catmandu convert MARC to YAML --fix my.fix < perl_books.mrc
+    
+
+See [Catmandu Importers](http://librecat.org/Catmandu/#importers) and
+[Catmandu Fixes](http://librecat.org/Catmandu/#fixes) for a deeper 
+understanding of how [Catmandu](http://librecat.org/) works.
+
 # DESCRIPTION
 
-[Catmandu::Fix::marc\_spec](https://metacpan.org/pod/Catmandu::Fix::marc_spec) is a fix method for the 
+[Catmandu::Fix::marc\_spec](https://metacpan.org/pod/Catmandu::Fix::marc_spec) is a fix for the 
 famous [Catmandu Framework](https://metacpan.org/pod/Catmandu).
 
-It behaves like <Catmandu::Fix::marc\_map|Catmandu::Fix::marc\_map> for the most
-part, but has a more fine grained method to reference data content.
+For the most part it behaves like 
+[Catmandu::Fix::marc\_map](https://metacpan.org/pod/Catmandu::Fix::marc_map) , but has a more fine
+grained method to reference MARC data content.
 
 See [MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/) 
 for documentation on the path syntax.
 
-# SUBROUTINES/METHODS
+# METHODS
 
-## marc\_spec($marcspec, $var, %options)
+## marc\_spec(Str, Str, Str, ...)
 
-$marcspec is a string with the syntax of
+First parameter must be a string, following the syntax of
 [MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/).
-Use always single quotes with this first parameter.
+Do always use single quotes with this first parameter.
 
-$var is the variable to assign referenced values to. Use $var.$append to
-add referenced data values as an array element.
+Second parameter is a string describing the variable or the variable path
+to assign referenced values to 
+(see [Catmandu Paths](http://librecat.org/Catmandu/#paths)).
+
+You may use one of $first, $last, $prepend or $append to add 
+referenced data values to a specific position of an array
+(see [Catmandu Wildcards](http://librecat.org/Catmandu/#wildcards)).
 
     # INPUT
     [245,1,0,"a","Cross-platform Perl /","c","Eric F. Johnson."]
@@ -111,7 +129,19 @@ add referenced data values as an array element.
     marc_spec('245', my.title.$append)
     
     # OUTPUT
-    ["Cross-platform Perl /Eric F. Johnson."]
+    {
+      my {
+        title [
+            [0] "Cross-platform Perl /Eric F. Johnson."
+        ]
+      }
+      
+    }
+    
+
+Third and every other parameters are optional and must
+be in the form of key:value (see ["OPTONS"](#optons) for a deeper 
+understanding of options).
 
 # OPTIONS
 
@@ -125,10 +155,18 @@ an array element.
     [650," ",0,"a","Web servers."]
     
     # CALL
-    marc_spec('650', my.split.subjects, split:1)
+    marc_spec('650', my.subjects, split:1)
     
     # OUTPUT
-    ["Perl (Computer program language)", "Web servers."]
+    {
+      my {
+        subjects [
+            [0] "Perl (Computer program language)",
+            [1] "Web servers."
+        ]
+      }
+    }
+    
 
 ## join
 
@@ -140,10 +178,14 @@ This will only have an effect if option split is undefined (not set or set to 0)
     [650," ",0,"a","Web servers."]
     
     # CALL
-    marc_spec('650', my.join.subjects, join:'###')
+    marc_spec('650', my.subjects, join:'###')
     
     # OUTPUT
-    "Perl (Computer program language)###Web servers."
+    {
+      my {
+        subjects "Perl (Computer program language)###Web servers."
+      }
+    }
 
 ## pluck
 
@@ -154,10 +196,17 @@ happens in 'natural' order (first number 0 to 9 and then letters a to z).
     ["020"," ", " ","a","0491001304","q","black leather"]
     
     # CALL
-    marc_spec('020$q$a', my.natural.isbn, split:1)
+    marc_spec('020$q$a', my.isbn, split:1)
     
     # OUTPUT
-    [0491001304, "black leather"]
+    {
+      my {
+        isbn [
+            [0] 0491001304,
+            [1] "black leather"
+        ]
+      }
+    }
     
 
 If pluck is set to 1, values will be referenced by the order stated in the
@@ -170,7 +219,14 @@ MARCspec.
     marc_spec('020$q$a', my.plucked.isbn, split:1, pluck:1)
     
     # OUTPUT
-    ["black leather", 0491001304]
+    {
+      my {
+        isbn [
+            [0] "black leather",
+            [1] 0491001304
+        ]
+      }
+    }
 
 ## value
 
@@ -184,10 +240,14 @@ at least one of them exists:
     ["020"," ", " ","a","0491001304"]
     
     # CALL
-    marc_spec('020$a$q', my.isbns, value:'one subfield exists')
+    marc_spec('020$a$q', my.isbn, value:'one subfield exists')
     
     # OUTPUT
-    "one subfield exists"
+    {
+      my {
+        isbn "one subfield exists"
+      }
+    }
 
 ## record
 
@@ -203,7 +263,7 @@ work on this record instead of the default record.
 
 ## invert
 
-This has only an effect on subfield (values). If set to 1 it will invert the 
+This has only an effect on subfields (values). If set to 1 it will invert the 
 last pattern for every subfield. E.g.
 
     # references all subfields but not subfield a and q
@@ -220,6 +280,8 @@ last pattern for every subfield. E.g.
 
 This version of is agnostic of Subspecs as described in  [MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/).
 Later versions will include this feature.
+
+Please report any bugs to [https://github.com/cKlee/Catmandu-Fix-marc\_spec/issues](https://github.com/cKlee/Catmandu-Fix-marc_spec/issues).
 
 # AUTHOR
 
@@ -238,6 +300,14 @@ it under the same terms as Perl itself.
 
 # SEE ALSO
 
-[Catmandu::Fix](https://metacpan.org/pod/Catmandu::Fix),
-[Catmandu::MARC](https://metacpan.org/pod/Catmandu::MARC),
-[Catmandu::MARC::Fix::marc\_map](https://metacpan.org/pod/Catmandu::MARC::Fix::marc_map)
+- [MARCspec - A common MARC record path language](http://marcspec.github.io/MARCspec/)
+- [Catmandu](http://librecat.org/)
+- [Catmandu Importers](http://librecat.org/Catmandu/#importers)
+- [Catmandu Importers](http://librecat.org/Catmandu/#importers)
+- [Catmandu Fixes](http://librecat.org/Catmandu/#fixes)
+- [Catmandu::MARC::Fix::marc\_map](https://metacpan.org/pod/Catmandu::MARC::Fix::marc_map)
+- [Catmandu Paths](http://librecat.org/Catmandu/#paths)
+- [Catmandu Wildcards](http://librecat.org/Catmandu/#wildcards)
+- [MARC::Spec](https://metacpan.org/pod/MARC::Spec)
+- [Catmandu::Fix](https://metacpan.org/pod/Catmandu::Fix)
+- [Catmandu::MARC](https://metacpan.org/pod/Catmandu::MARC)
