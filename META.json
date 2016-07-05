@@ -1,5 +1,5 @@
 {
-   "abstract" : "Blah blah blah",
+   "abstract" : "reference MARC values via L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>",
    "author" : [
       "Carsten Klee <klee@cpan.org>"
    ],
@@ -37,7 +37,12 @@
       },
       "runtime" : {
          "requires" : {
-            "perl" : "5.008005"
+            "Catmandu" : "1.0201",
+            "Catmandu::MARC" : "0.218",
+            "Const::Fast" : "0.014",
+            "MARC::Spec" : "0",
+            "Moo" : "1.0",
+            "perl" : "v5.10.1"
          }
       },
       "test" : {
@@ -47,6 +52,20 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.01"
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/cKlee/Catmandu-Fix-marc_spec/issues"
+      },
+      "homepage" : "https://github.com/cKlee/Catmandu-Fix-marc_spec",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/cKlee/Catmandu-Fix-marc_spec.git",
+         "web" : "https://github.com/cKlee/Catmandu-Fix-marc_spec"
+      }
+   },
+   "version" : "0.0.1",
+   "x_contributors" : [
+      "Carsten Klee <cKlee@users.noreply.github.com>"
+   ]
 }
 

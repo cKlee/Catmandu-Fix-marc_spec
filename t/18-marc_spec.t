@@ -1,11 +1,8 @@
 #!/usr/bin/perl
-
 use strict;
 use warnings qw(FATAL utf8);
 use utf8;
-
 use Test::More;
-
 use Catmandu::Importer::MARC;
 use Catmandu::Fix;
 

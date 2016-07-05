@@ -17,7 +17,6 @@ has join   => ( fix_opt => 1 );
 has value  => ( fix_opt => 1 );
 has pluck  => ( fix_opt => 1 );
 has invert => ( fix_opt => 1 );
-#has data   => ( fix_opt => 1, default => sub { {} } );
 
 const my $NO_LENGTH            => -1;
 const my $FIELD_OFFSET         => 3;
@@ -32,12 +31,10 @@ my $cache;
 
 sub fix {
     my ( $self, $data ) = @_;
-
-    my $join_char  = $self->join // $EMPTY;
-    my $record_key = $self->record // 'record';
-    my $_id        = $data->{_id};
-
-    my ( $path, $key ) = parse_data_path( $self->path );
+    my $join_char       = $self->join // $EMPTY;
+    my $record_key      = $self->record // 'record';
+    my $_id             = $data->{_id};
+    my ( $path, $key )  = parse_data_path( $self->path );
 
     # get MARCspec
     if ( !defined $cache->{ $self->spec } ) {
@@ -48,7 +45,7 @@ sub fix {
     my $get_index_range = sub {
         my ( $spec, $total ) = @_;
 
-        my $last_index   = $total - 1;
+        my $last_index  = $total - 1;
         my $index_start = $spec->index_start;
         my $index_end   = $spec->index_end;
 
@@ -83,10 +80,10 @@ sub fix {
     };
 
     # filter by tag
-    my @fields = ();
+    my @fields     = ();
     my $field_spec = $ms->field;
-    my $tag = $field_spec->tag;
-    $tag = qr/$tag/;
+    my $tag        = $field_spec->tag;
+    $tag           = qr/$tag/;
     unless ( @fields =
         grep { $_->[0] =~ /$tag/ } @{ $data->{$record_key} } )
     {
@@ -95,7 +92,7 @@ sub fix {
 
     if (defined $field_spec->indicator1) {
         my $indicator1 = $field_spec->indicator1;
-        $indicator1 = qr/$indicator1/;
+        $indicator1    = qr/$indicator1/;
         unless( @fields = 
             grep { defined $_->[1] && $_->[1] =~ /$indicator1/ } @fields)
         {
@@ -104,7 +101,7 @@ sub fix {
     }
     if (defined $field_spec->indicator2) {
         my $indicator2 = $field_spec->indicator2;
-        $indicator2 = qr/$indicator2/;
+        $indicator2    = qr/$indicator2/;
         unless( @fields = 
             grep { defined $_->[2] && $_->[2] =~ /$indicator2/ } @fields)
         {
@@ -138,7 +135,7 @@ sub fix {
     }
 
     if ( defined $ms->subfields ) {    # now we dealing with subfields
-                                       # set the order of subfields
+        # set the order of subfields
         my @sf_spec = map { $_ } @{ $ms->subfields };
         unless ( $self->pluck ) {
             @sf_spec = sort { $a->code cmp $b->code } @sf_spec;
@@ -185,9 +182,9 @@ sub fix {
                 }
 
                 @subfield = ();
-                my $code =
+                my $code  =
                   ( $invert_level == $INVERT_LEVEL_3 ) ? $codes : $sf->code;
-                $code = qr/$code/;
+                $code     = qr/$code/;
                 for ( my $i = $start ; $i < @$field ; $i += 2 ) {
                     if ( $field->[$i] =~ /$code/ ) {
                         push( @subfield, $field->[ $i + 1 ] );
@@ -272,17 +269,14 @@ sub fix {
             }
             next unless (@subfields);
 
-
             # get substring
             if ( defined $char_start ) {
                 @subfields =
                   map { substr $_, $char_start, $field_spec->char_length }
                     @subfields;
             }
-
             push @mapped, @subfields;
         }
-
         unless (@mapped) { return $data }
 
         $self->split
@@ -299,9 +293,12 @@ __END__
 
 =head1 NAME
 
-Catmandu::Fix::marc_spec - reference MARC values via L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>
+Catmandu::Fix::marc_spec - reference MARC values via 
+L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>
 
 =head1 SYNOPSIS
+
+In a fix file e.g. 'my.fix':
 
     # Assign value of MARC leader to my.ldr.all
     marc_spec('LDR', my.ldr.all)
@@ -381,27 +378,41 @@ Catmandu::Fix::marc_spec - reference MARC values via L<MARCspec - A common MARC 
     # to my.isbn.other.subfields
     marc_spec('020$a' my.isbn.other.subfields, invert:1)
 
+And then on command line:
+
+    catmandu convert MARC to YAML --fix my.fix < perl_books.mrc
+    
+See L<Catmandu Importers|http://librecat.org/Catmandu/#importers> and
+L<Catmandu Fixes|http://librecat.org/Catmandu/#fixes> for a deeper 
+understanding of how L<Catmandu|http://librecat.org/> works.
+
 =head1 DESCRIPTION
 
-L<Catmandu::Fix::marc_spec|Catmandu::Fix::marc_spec> is a fix method for the 
+L<Catmandu::Fix::marc_spec|Catmandu::Fix::marc_spec> is a fix for the 
 famous L<Catmandu Framework|Catmandu>.
 
-It behaves like <Catmandu::Fix::marc_map|Catmandu::Fix::marc_map> for the most
-part, but has a more fine grained method to reference data content.
+For the most part it behaves like 
+L<Catmandu::Fix::marc_map|Catmandu::Fix::marc_map> , but has a more fine
+grained method to reference MARC data content.
 
 See L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/> 
 for documentation on the path syntax.
 
-=head1 SUBROUTINES/METHODS
+=head1 METHODS
 
-=head2 marc_spec($marcspec, $var, %options)
+=head2 marc_spec(Str, Str, Str, ...)
 
-$marcspec is a string with the syntax of
+First parameter must be a string, following the syntax of
 L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>.
-Use always single quotes with this first parameter.
+Do always use single quotes with this first parameter.
 
-$var is the variable to assign referenced values to. Use $var.$append to
-add referenced data values as an array element.
+Second parameter is a string describing the variable or the variable path
+to assign referenced values to 
+(see L<Catmandu Paths|http://librecat.org/Catmandu/#paths>).
+
+You may use one of $first, $last, $prepend or $append to add 
+referenced data values to a specific position of an array
+(see L<Catmandu Wildcards|http://librecat.org/Catmandu/#wildcards>).
 
     # INPUT
     [245,1,0,"a","Cross-platform Perl /","c","Eric F. Johnson."]
@@ -410,8 +421,18 @@ add referenced data values as an array element.
     marc_spec('245', my.title.$append)
     
     # OUTPUT
-    ["Cross-platform Perl /Eric F. Johnson."]
-
+    {
+      my {
+        title [
+            [0] "Cross-platform Perl /Eric F. Johnson."
+        ]
+      }
+      
+    }
+    
+Third and every other parameters are optional and must
+be in the form of key:value (see L</"OPTONS"> for a deeper 
+understanding of options).
 
 =head1 OPTIONS
 
@@ -425,10 +446,18 @@ an array element.
     [650," ",0,"a","Web servers."]
     
     # CALL
-    marc_spec('650', my.split.subjects, split:1)
+    marc_spec('650', my.subjects, split:1)
     
     # OUTPUT
-    ["Perl (Computer program language)", "Web servers."]
+    {
+      my {
+        subjects [
+            [0] "Perl (Computer program language)",
+            [1] "Web servers."
+        ]
+      }
+    }
+    
 
 =head2 join
 
@@ -440,10 +469,14 @@ This will only have an effect if option split is undefined (not set or set to 0)
     [650," ",0,"a","Web servers."]
     
     # CALL
-    marc_spec('650', my.join.subjects, join:'###')
+    marc_spec('650', my.subjects, join:'###')
     
     # OUTPUT
-    "Perl (Computer program language)###Web servers."
+    {
+      my {
+        subjects "Perl (Computer program language)###Web servers."
+      }
+    }
 
 =head2 pluck
 
@@ -454,10 +487,17 @@ happens in 'natural' order (first number 0 to 9 and then letters a to z).
     ["020"," ", " ","a","0491001304","q","black leather"]
     
     # CALL
-    marc_spec('020$q$a', my.natural.isbn, split:1)
+    marc_spec('020$q$a', my.isbn, split:1)
     
     # OUTPUT
-    [0491001304, "black leather"]
+    {
+      my {
+        isbn [
+            [0] 0491001304,
+            [1] "black leather"
+        ]
+      }
+    }
     
 
 If pluck is set to 1, values will be referenced by the order stated in the
@@ -470,7 +510,14 @@ MARCspec.
     marc_spec('020$q$a', my.plucked.isbn, split:1, pluck:1)
     
     # OUTPUT
-    ["black leather", 0491001304]
+    {
+      my {
+        isbn [
+            [0] "black leather",
+            [1] 0491001304
+        ]
+      }
+    }
 
 =head2 value
 
@@ -484,10 +531,14 @@ at least one of them exists:
     ["020"," ", " ","a","0491001304"]
     
     # CALL
-    marc_spec('020$a$q', my.isbns, value:'one subfield exists')
+    marc_spec('020$a$q', my.isbn, value:'one subfield exists')
     
     # OUTPUT
-    "one subfield exists"
+    {
+      my {
+        isbn "one subfield exists"
+      }
+    }
 
 =head2 record
 
@@ -503,7 +554,7 @@ work on this record instead of the default record.
 
 =head2 invert
 
-This has only an effect on subfield (values). If set to 1 it will invert the 
+This has only an effect on subfields (values). If set to 1 it will invert the 
 last pattern for every subfield. E.g.
 
    # references all subfields but not subfield a and q
@@ -520,6 +571,8 @@ last pattern for every subfield. E.g.
 
 This version of is agnostic of Subspecs as described in  L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>.
 Later versions will include this feature.
+
+Please report any bugs to L<https://github.com/cKlee/Catmandu-Fix-marc_spec/issues>.
 
 =head1 AUTHOR
 
@@ -544,8 +597,30 @@ it under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-L<Catmandu::Fix|Catmandu::Fix>,
-L<Catmandu::MARC|Catmandu::MARC>,
-L<Catmandu::MARC::Fix::marc_map|Catmandu::MARC::Fix::marc_map>
+=over
+
+=item * L<MARCspec - A common MARC record path language|http://marcspec.github.io/MARCspec/>
+
+=item * L<Catmandu|http://librecat.org/>
+
+=item * L<Catmandu Importers|http://librecat.org/Catmandu/#importers>
+
+=item * L<Catmandu Importers|http://librecat.org/Catmandu/#importers>
+
+=item * L<Catmandu Fixes|http://librecat.org/Catmandu/#fixes>
+
+=item * L<Catmandu::MARC::Fix::marc_map|Catmandu::MARC::Fix::marc_map>
+
+=item * L<Catmandu Paths|http://librecat.org/Catmandu/#paths>
+
+=item * L<Catmandu Wildcards|http://librecat.org/Catmandu/#wildcards>
+
+=item * L<MARC::Spec|MARC::Spec>
+
+=item * L<Catmandu::Fix|Catmandu::Fix>
+
+=item * L<Catmandu::MARC|Catmandu::MARC>
+
+=back
 
 =cut
